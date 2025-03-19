@@ -1,1 +1,1 @@
-# API---videogames-rawg.io-
+# API INSTRUCTIONS
