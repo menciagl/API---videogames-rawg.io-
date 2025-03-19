@@ -1,0 +1,613 @@
+---
+title: "Evolution of Video Games over Time"
+output: html_document
+author: Mencía Gómez y Laura Toro
+date: "2025-03-02"
+---
+
+# Evolution of Video Games over Time
+
+The following research is a Data Harvesting project aiming to describe and provide an account for the evolution of video games in the last years. We have focused on aspects like the evolution of video game genres, main platforms and ratings, elaborating compelling plots and also taking into account some limitations.
+
+## Instructions to extract the API
+
+We're going to work with the API from RAWG (rawg.io). In order to extract a key for that API, please follow the following instructions:
+
+1.  **Install and load dotenv**:
+
+```{r}
+
+# Install dotenv if it's not previously installed
+if (!requireNamespace("dotenv", quietly = TRUE)) install.packages("dotenv")
+
+# Load dotenv library
+library(dotenv)
+
+```
+
+2.  **Get your API key** from <https://rawg.io/>: on the website, click on "API" on the upper right corner. You'll see the button "Get API Key". Click there and register or log in the site first. Once that's done, click on "Get API Key" again. You'll see at the end a code of letters and numbers. That is your API key, copy it.
+3.  **Save the key in a .env file**: Now, go to File on R, then New File and open a Text File. Once there you must write: TOKEN=api_key (substitute "api_key" for the series of letters and numbers you obtained on the webpage). You must save that file as ".env" in the same project folder of the script you're running. (Important: the script and the .env file have to be in the SAME PROJECT, not just in the same directory/folder)
+4.  **Verify your API key works** by running the following code:
+
+```{r}
+
+# Load variables from .env
+dotenv::load_dot_env()
+
+# Obtain API key
+api_key <- Sys.getenv("TOKEN")
+
+# Verify it works
+
+url_genres <- paste0("https://api.rawg.io/api/genres?key=", api_key)
+
+if (api_key == "") {
+  stop("Error: API key not found. Verify that the archive .env exists and contains the key.")
+}
+
+```
+
+Now, let's proceed to analyze video game trends!
+
+## GENRES
+
+First, we want to extract the number of video games genres, the types and their frecuency.
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+
+library(httr)
+library(jsonlite)
+library (dplyr)
+
+# Get genres
+response_genres <- GET(url_genres)
+
+data <- content(response_genres, "text")
+genres <- fromJSON(data)
+
+# As JSON format:
+genres_data <- fromJSON(content(response_genres, "text"))
+
+genres_data
+```
+
+There are 19 genres of video games: action, indie, adventure, role-playing-games, strategy, and so on.
+
+Now we want to **extract the number of video games of each genre type by year**.
+
+This code retrieves the number of games per genre for each year between 2010 and 2025 using the RAWG API. The results are stored in a data frame where each column represents a genre and contains the game counts per year. For each genre, an API request is made for each year and the corresponding number of games is returned. Finally, a Total column is added showing the total number of games per year, considering all genres. The final result is a data frame with the game counts by genre and year, in addition to the annual totals.
+
+```{r}
+# to have genres as a dataset
+genres <- genres_data$results |>
+  distinct(id, .keep_all = TRUE)
+
+# create empty lists to fill
+game_counts_by_year <- list()
+total_games_by_year <- list()
+
+# We initialize an empty dataframe to store the game counts by genre and year
+game_counts_df <- data.frame(Year = 2010:2024)
+
+# List to store games by genre
+game_counts_by_genre <- list()
+
+# Iterate over each genre and add the game results by year
+for (i in 1:nrow(genres)) {
+  genre <- genres[i, ]  
+  genre_id <- genre$id
+  genre_name <- genre$name
+  
+  # We initialize a vector to store the count of games of this genre per year
+  genre_years <- numeric(length = 15)  #For the years 2010-2024
+  
+  # Make a request to get the games of that genre for each year
+  for (year in 2010:2024) {
+    url_games <- paste0("https://api.rawg.io/api/games?key=", api_key, "&genres=", genre_id, "&dates=", year, "-01-01,", year, "-12-31")
+    
+    # Make a GET request to get the games of the genre in the year
+    response_games <- GET(url_games)
+    
+    if (status_code(response_games) == 200) {
+      games_data <- fromJSON(content(response_games, "text", encoding = "UTF-8"))
+      game_count <- games_data$count  # Get the number of games of this genre in the year
+    } else {
+      game_count <- NA  
+    }
+    
+    # Store the count in the results vector by year
+    genre_years[year - 2009] <- game_count
+  }
+  
+  Sys.sleep(0.2)
+  
+  # Add the results vector of this gender to the data frame
+  game_counts_by_genre[[genre_name]] <- genre_years
+}
+
+# Dataframe
+game_counts_df <- cbind(game_counts_df, as.data.frame(game_counts_by_genre))
+
+# We add the 'Total' column that contains the total number of games per year
+game_counts_df$Total <- rowSums(game_counts_df[, -1], na.rm = TRUE)
+
+# Final datafram
+print(game_counts_df)
+
+
+```
+
+### First plot: Evolution of Video game Genres Popularity (absolute number)
+
+Now we'll analyze and visualize the most popular game genres, based on the game_counts_df dataframe previously obtained:
+
+```{r}
+# Libraries required
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Get the 10 genres with the most games in total
+top_10_genres <- game_counts_df |>
+  select(-Year, -Total) %>%  
+  summarise(across(everything(), sum, na.rm = TRUE)) %>%  # 
+  pivot_longer(cols = everything(), names_to = "Genre", values_to = "Total_Games") %>%
+  arrange(desc(Total_Games)) %>%
+  slice_head(n = 10)  # Top 10
+
+# Filter the dataframe to include only the top 10 genres
+filtered_df <- game_counts_df %>%
+  select(Year, any_of(top_10_genres$Genre)) 
+
+# Long format
+plot_data <- filtered_df %>%
+  pivot_longer(cols = -Year, names_to = "Genre", values_to = "Game_Count")
+
+# Plot
+ggplot(plot_data, aes(x = Year, y = Game_Count, color = Genre, group = Genre)) +
+  geom_line(size = 1) +  
+  geom_point(size = 1.8) +  
+  labs(title = "Evolution of the Most Popular Video game Genres (2010-2025)",
+       x = "Year", 
+       y = "Number of Games",
+       color = "Genre") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+
+```
+
+**Interpretation**
+
+We see that Action and Adventure are the most popular genres over time. We must keep in mind that many games fall into both genres at the same time, hence the high frequency. The peak number of video games in these genres is in 2022-2023, which may be due, on the one hand, to the growth of streaming platforms and the global interconnection of players, which has encouraged the creation of more ambitious games in these genres, or, on the other hand, to the fact that the Rawg platform itself collected a greater number of games in these years. Another possible explanation is the pandemic, which, as a result of people having to stay at home, increased the number of video games played and therefore the investment in the video game industry. Afterwards, there was a large drop, which we can relate to the emergence or popularity of other genres, because developers began to diversify their focus towards other genres such as indie, as we see in the graph, which begins to gain popularity shortly after the fall of action and adventure. Even so, the subsequent collapse of these genres in 2024 is incomprehensible, we relate it to the webpage information itself.
+
+### Second plot: Evolution of Video game Genres Popularity (% of Total per Year)
+
+In this second plot, we don't want the absolute number of games, but rather the relative percentages. This allows us to compare the relative popularity of genres over time, without the years with the most games distorting perceptions. It shows whether a genre has gained or lost relevance compared to others, not just its raw number of games.
+
+```{r}
+
+# Normalize data: percentage of each genre in relation to the total number of games per year
+normalized_df <- game_counts_df  
+normalized_df[, -c(1, ncol(game_counts_df))] <- sweep(game_counts_df[, -c(1, ncol(game_counts_df))], 
+                                                      1, 
+                                                      game_counts_df$Total, 
+                                                      FUN = "/")
+
+# Top 10 with genre names
+top_10_genres_vector <- top_10_genres$Genre
+
+# Filter the normalized data frame to include only the most popular genres
+filtered_normalized_df <- normalized_df[, c("Year", top_10_genres_vector)]
+
+# Long format for ggplot
+long_normalized_df <- pivot_longer(filtered_normalized_df, cols = -Year, names_to = "Genre", values_to = "Proportion")
+
+# Plot
+ggplot(long_normalized_df, aes(x = Year, y = Proportion * 100, color = Genre)) +
+  geom_line(size = 1.2) +
+  labs(title = "Evolution of Video game Genres Popularity (% of Total per Year)",
+       x = "Year", y = "Percentage of games",
+       color = "Genre") +
+  theme_minimal()
+
+```
+
+**Interpretation**
+
+The final graph shows how the relative popularity of the major genres has changed between 2010 and 2024, in terms of percentage of total games released each year, not the absolute number as before. Here we see much more clearly how adventure and action games have had more stable trends, while indie and casual games increased exponentially in 2022-23 approximately. A possible explanation of this is the expansion of the industry and the possibilities of smaller creators to gain more notoriety thanks to a greater number of players, especially after the pandemic.
+
+Making it interactive:
+
+```{r}
+
+library(plotly)
+
+interactive_plot <- plot_ly(data = long_normalized_df, 
+                            x = ~Year, 
+                            y = ~Proportion, 
+                            color = ~Genre, 
+                            type = 'scatter', 
+                            mode = 'lines',
+                            hoverinfo = 'text',
+                            text = ~paste0(Genre, ": ", round(Proportion * 100, 2), "%")) %>%
+  layout(title = "Evolution of Video game Genres Popularity (% of Total per Year)",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Percentage of games"),
+         hovermode = "x unified")
+
+# Plot
+interactive_plot
+
+
+```
+
+## PLATFORMS
+
+We do now the same analysis we did for genre, but here we study the most popular platforms each year, but we plot only the relative frequencies, since it's more useful to understand the patterns and tendencies.
+
+The code below retrieves data for major gaming platforms excluding non-relevant platforms. We specifically filtered five major gaming platforms: Nintendo, PlayStation, PC, SEGA, and Xbox. The reason behind this selection is to exclude other platforms like iOS and Android, which, while capable of running video games, are not designed exclusively for this purpose. Our goal is to focus on platforms dedicated to the gaming experience, thus ensuring a more accurate analysis within the context of the video game industry.
+
+Then we calculated the number of games available for each platform for the years 2010–2024 and got the total number of games per year.Then we normalized the data by calculating the percentage of games per platform relative to the annual total. We filtered the 10 most popular platforms and organize the data into a chart-friendly format.
+
+```{r}
+
+# Get top platforms
+url_platforms <- paste0("https://api.rawg.io/api/platforms/lists/parents?key=", api_key)
+response_platforms <- GET(url_platforms)
+platforms_data <- fromJSON(content(response_platforms, "text", encoding = "UTF-8"))
+
+# Extract names and IDs of major platforms
+platforms <- platforms_data$results
+platforms <- platforms[, c("id", "name")]  
+platforms <- platforms[platforms$name %in% c("Nintendo", "PlayStation", "PC", "SEGA", "Xbox"), ] 
+
+# Create lists to store data
+game_counts_by_year <- list()
+total_games_by_year <- numeric()
+
+# Years(2010-2024)
+years <- 2010:2024
+
+# Tour each main platform
+for (i in 1:nrow(platforms)) {
+  platform <- platforms[i, ]
+  platform_id <- platform$id
+  platform_name <- platform$name
+
+  # Initialize vector to count games per year
+  platform_years <- numeric(length(years))
+
+  # Obtain data by year for the platform
+  for (j in seq_along(years)) {
+    year <- years[j]
+    url_games <- paste0("https://api.rawg.io/api/games?key=", api_key, 
+                        "&parent_platforms=", platform_id, "&dates=", year, "-01-01,", year, "-12-31")
+    
+    response_games <- GET(url_games)
+    
+    if (status_code(response_games) == 200) {
+      games_data <- fromJSON(content(response_games, "text", encoding = "UTF-8"))
+      platform_years[j] <- games_data$count  
+    } else {
+      cat("Error en el año ", year, " para plataforma ", platform_name, "\n")
+      platform_years[j] <- NA 
+    }
+
+    Sys.sleep(0.2)  
+  }
+
+  game_counts_by_year[[platform_name]] <- platform_years
+}
+
+# Get total games per year (reusing previous code)
+for (j in seq_along(years)) {
+  year <- years[j]
+  url_games_total <- paste0("https://api.rawg.io/api/games?key=", api_key, 
+                            "&dates=", year, "-01-01,", year, "-12-31")
+  
+  response_games_total <- GET(url_games_total)
+  
+  if (status_code(response_games_total) == 200) {
+    games_data_total <- fromJSON(content(response_games_total, "text", encoding = "UTF-8"))
+    total_games_by_year[j] <- games_data_total$count
+  } else {
+    cat("Error en la solicitud para el año ", year, "\n")
+    total_games_by_year[j] <- NA
+  }
+
+  Sys.sleep(0.2)
+}
+
+# Dataframe
+game_counts_df <- as.data.frame(game_counts_by_year)
+game_counts_df <- cbind(Year = years, game_counts_df) 
+game_counts_df$Total <- total_games_by_year  
+
+# Top 10 platforms
+top_platforms <- colSums(game_counts_df[, -c(1, ncol(game_counts_df))], na.rm = TRUE)  
+top_platforms <- sort(top_platforms, decreasing = TRUE)
+top_platforms <- names(top_platforms[1:5])
+
+filtered_df <- game_counts_df[, c("Year", top_platforms)]
+
+filtered_df
+```
+
+### Third plot: Evolution of the main platforms (% of the total per year)
+
+As we saw in the previous plot of genres, it is better to see the numbers as a proportion rather than their absolute values, as they provide more clarity in looking at the evolution.
+
+```{r}
+
+# Long format for ggplot
+long_df <- pivot_longer(filtered_df, cols = -Year, names_to = "Platform", values_to = "Count")
+
+# Normalize data: calculate the percentage of each platform in relation to the total number of games per year
+normalized_df <- game_counts_df  
+normalized_df[, -c(1, ncol(game_counts_df))] <- sweep(game_counts_df[, -c(1, ncol(game_counts_df))], 
+                                                      1, 
+                                                      game_counts_df$Total, 
+                                                      FUN = "/")
+
+# Top 10 most opular platforms
+filtered_normalized_df <- normalized_df[, c("Year", top_platforms)]
+
+# Long format for ggplot and plotly
+long_normalized_df <- pivot_longer(filtered_normalized_df, cols = -Year, names_to = "Platform", values_to = "Proportion")
+
+# Plot
+ggplot(long_normalized_df, aes(x = Year, y = Proportion * 100, color = Platform)) +
+  geom_line(size = 1.2) +
+  labs(title = "Evolution of the main platforms (% of the total per year)",
+       x = "Year", y = "Percentage of games",
+       color = "Platform") +
+  theme_minimal()
+```
+
+**Interpretation**
+
+In general, what we see is that PC gaming has increased considerably, while the importance of PlayStation, Xbox, and Nintendo video games has progressively decreased, until they almost lost their importance in 2020. This may be due to the trend toward subscription services and game streaming, which has changed the way players consume video games on consoles. Furthermore, during the 2020 pandemic, there may have been an acceleration of market digitalization, favoring more flexible models like those on PCs.
+
+In addition, it may be easier for developers to publish games on PCs through platforms like Steam, which has allowed for a growth of independent games. In contrast, consoles tend to focus on games from large studios, which are more expensive and take longer to develop, resulting in fewer new games each year
+
+The same plot with plotly:
+
+```{r}
+interactive_plot <- plot_ly(data = long_normalized_df, 
+                            x = ~Year, 
+                            y = ~Proportion * 100, 
+                            color = ~Platform, 
+                            type = 'scatter', 
+                            mode = 'lines',
+                            hoverinfo = 'text',
+                            text = ~paste0(Platform, ": ", round(Proportion * 100, 2), "%")) %>%
+  layout(title = "Evolution of the main platforms (% of the total per year)",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Percentage of games"),
+         hovermode = "x unified")
+
+interactive_plot
+
+```
+
+## GAMES RATING
+
+Now, we'll extract video game information from the RAWG API, retrieving paginated data to build a large dataset with multiple games. Pagination is essential for efficiently handling large amounts of data. In this case, it's done by paging through 400 pages of information to extract and process the video game data. Then, the top 20 titles are filtered and sorted by their Metacritic scores. The data is then processed to extract genre names, tags, and platforms. Once the data is transformed, it is organized into a clean and structured dataframe.
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+
+#  URL for video games
+url_games <- paste0("https://api.rawg.io/api/games?key=", api_key)
+
+# Make the GET request with the API key in the URL
+response_games <- GET(url_games)
+
+data_games <- content(GET(paste0("https://api.rawg.io/api/games?key=", api_key)), "text")
+games <- fromJSON(data_games)
+
+# We save the data in a data frame
+games_data <- as.data.frame(games$results)
+
+head(games_data)
+
+```
+
+Top games:
+
+We select the top 20 games according to Metacritic, a website that compiles reviews of music albums, video games, movies, TV shows.
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+
+# Number of pages to get (e.g. 5 pages of 20 sets = 100 sets)
+total_pages <- 400  
+all_games <- data.frame()
+
+for (i in 1:total_pages) {
+  url_paginated <- paste0("https://api.rawg.io/api/games?key=", api_key, "&page=", i)
+  response <- GET(url_paginated)
+
+  if (status_code(response) == 200) {
+    data_page <- fromJSON(content(response, "text"))
+    games_page <- as.data.frame(data_page$results)
+    all_games <- bind_rows(all_games, games_page) 
+  } else {
+    print(paste("Error en la página", i))
+  }
+  Sys.sleep(0.2)
+}
+
+# Sort and select the top 20 games by Metacritic
+top_games <- all_games %>%
+  filter(!is.na(metacritic)) %>%
+  arrange(desc(metacritic)) %>%
+  head(20)
+
+print(top_games)
+
+top_games %>%
+  select(name, released, metacritic, genres, platforms, tags)
+```
+
+Extract tags and genres:
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(purrr)
+
+# Function to extract names from nested data frames
+extract_names_df <- function(df_column) {
+  if (is.data.frame(df_column) && "name" %in% names(df_column)) {
+    return(paste(df_column$name, collapse = ", "))  # Join names with commas
+  } else {
+    return(NA)
+  }
+}
+
+# Apply the function to the problematic columns
+top_games2 <- top_games %>%
+  mutate(
+    genres = map_chr(genres, extract_names_df),
+    tags = map_chr(tags, extract_names_df),
+    )
+
+print(top_games2)
+
+top_games2 %>%
+  select(name, released, metacritic, genres, platforms, tags)
+```
+
+Extract platforms:
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+extract_platform_names <- function(df_column) {
+  if (is.data.frame(df_column) && "platform" %in% names(df_column)) {
+    return(paste(df_column$platform$name, collapse = ", ")) 
+  } else {
+    return(NA)  
+  }
+}
+
+# Apply the corrected function to "platforms"
+top_games2 <- top_games2 %>%
+  mutate(
+    platforms = map_chr(platforms, extract_platform_names)
+  )
+
+# Results
+print(top_games2)
+
+top_games2 %>%
+  select(name, released, metacritic, genres, platforms, tags)
+
+```
+
+### Fourth plot: Comparison between Metacritic and users ratings
+
+```{r}
+library(lubridate)
+library(scales)
+library(plotly)
+
+# Normalize ratings
+top_games2$normalized_metacritic <- top_games2$metacritic / 100  # Scale Metacritic 0-1
+top_games2$normalized_rating <- top_games2$rating / 5  # Scale Rating 0-1
+
+# 'Released' column is in date format
+top_games2$released <- as.Date(top_games2$released)
+
+# Create plot with Plotly
+plot <- plot_ly(data = top_games2, x = ~released) %>%
+  # Metacritic as blue dots
+  add_trace(y = ~normalized_metacritic, 
+            type = 'scatter', mode = 'markers', 
+            marker = list(size = ~sqrt(ratings_count)/2, color = 'blue', opacity = 0.6),
+            text = ~paste("Game:", name, "<br>Metacritic:", metacritic, "<br>Reviews:", ratings_count),
+            hoverinfo = 'text',
+            name = "Metacritic") %>%
+  
+  # User rating as red dots
+  add_trace(y = ~normalized_rating, 
+            type = 'scatter', mode = 'markers', 
+            marker = list(size = ~sqrt(ratings_count)/2, color = 'red', opacity = 0.6),
+            text = ~paste("Game:", name, "<br>User rating:", rating, "<br>Reviews:", ratings_count),
+            hoverinfo = 'text',
+            name = "User rating") %>%
+  
+  layout(title = "Comparing Metacritic rating and user rating",
+         xaxis = list(title = "Release year"),
+         yaxis = list(title = "Normalized rating"),
+         hovermode = "closest")
+
+# Show plot
+plot
+
+```
+
+**Interpretation**
+
+We see that metacritic scores are always higher than those of the user's, which we attribute to the greater diversity of opinions when it comes to user's reviews. While Metacritic selects games that have been highly rated by industry experts, users may have a different perception, influenced by factors such as nostalgia, personal play style, or even current trends.
+
+Furthermore, we started the analysis from de starpoint of filtering the top 20 games on Metacritic, which doesn't necessarily have to be the top 20 games chosen by users, which could be others.
+
+### Fifth plot: Distribution of the best video games
+
+Having ranked the best video games according to Metacritic since 1998 until now, we'll display them by year of release, play time, and genre. Clicking on each game also displays other relevant information, such as the platform it's available on and the specific Metacritic rating.
+
+It's necessary saying that we had to put the playtime variable on a logarithmic scale since all the games had low playtime values except for Zelda, which appeared with extremely high values, so the graph appeared almost empty with all the games crowded at the bottom and Zelda at the top. For clarity, it was necessary to use a logarithmic scale.
+
+```{r}
+
+# Create variable "year"
+top_games2$year <- year(top_games2$released)
+
+# Create variable primary_genre (just to select one)
+top_games2$primary_genre <- sapply(strsplit(as.character(top_games2$genres), ","), `[`, 1)
+
+
+p <- ggplot(top_games2, aes(x = year, y = playtime, color = primary_genre, text = paste("Game: ", name, "<br>Platforms: ", platforms, "<br>Metacritic: ", metacritic))) +
+  geom_point(alpha = 0.7) +  
+  geom_text(aes(label = name), hjust = 1.2, vjust = 0, size = 3) + 
+  scale_size_continuous(range = c(3, 10)) + 
+  scale_y_continuous(trans = 'log10', labels = scales::comma) + #Log scale 
+  labs(
+    title = "Distribution of the best video games by release year, play time, and genre",
+    x = "Release Year",
+    y = "Play time (log)",
+    color = "Genre",
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Plotly
+interactive_plot <- ggplotly(p, tooltip = "text")
+
+interactive_plot
+
+
+```
+
+## Limitations
+
+While this project allows for a comprehensible understanding of the evolution of video games over the last years, it is not without its limitations.
+
+**Classification problems:**
+
+First of all, we notice a big limitation regarding genre evolution. Some of this is due not to the API itself, but the way games are classified. Adventure and Action, as we've seen, are genres that usually work as a catch-all for a variety of games in which the sub-genres are very different. More specific genres, like survival horror or rogue-likes, despite being very different amongst themselves, are often grouped together in these categories. In addition to that, indie is used as a game genre when in reality it more accurately describes a characteristic of the developer company, but the genre can be action, platform or any other. In order to try to solve this, we thought about using the tags of the games as a way to find that subgenre, but as we can see in the data frame of the top games, a lot of them don't include this subgenre. Therefore, we opted to use the genre category.
+
+Within the limitations of classifications, we also saw that many games are classified into two types of genres, which makes analysis more difficult, as the "action" and "adventure" genres are overrepresented, as many games fall into both genres at the same time, while other games only fall into one genre. This later caused problems when creating the fifth plot ( Distribution of the best video games), since when visually looking at the top 20 best video games of the last 25 years and having to define only one genre per game, we decided to choose the first one that appeared, which is not entirely appropriate.
+
+To address this problem for future analysis, Rawg.io should be able to support subgenre categories, allowing for more specific categorization of video games while allowing only one game to be classified per subgenre.
+
+**Accuracy problems**
+
+In general, we believe that in certain aspects the website lacks information or is not fully collected correctly. We consider these three examples:
+
+1.  We find some limitations when it comes to understanding platform evolution, as because most games release on PC, this platform is overrepresented, while the rest of them appear at very low numbers. In general, we could understand why the number of PC games created has increased so much over the years, but we still find it excessively high compared to the rest.
+
+2.  Similarly, we were also surprised that the number of games released per year in general decreased so abruptly in 2024, which we attribute to the lack of information on the web.
+
+3.  Finally, some of the scores that Metacritic gave to the games did not match the official Metacritic scores, which is also an issue with the web data collection.
+
+**API limitations**
+
+Overall, we had no problems accessing the API endpoints, as it is quite manageable and the instructions provided on the website are very clear.
