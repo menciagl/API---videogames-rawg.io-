@@ -1,6 +1,6 @@
 # API INSTRUCTIONS
 
-The following Data Harvesting project aims to use the API from rawg.io to see changes in video game trends over the last years. To reproduce the script follow these instructions:
+The following Data Harvesting project aims to use the API from rawg.io to see changes in video game trends over the last years. **To reproduce the script follow these instructions**:
 
 1. First download the .rmd file, open it and save it into a new R Studio project.
 
