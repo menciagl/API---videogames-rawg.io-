@@ -2,7 +2,7 @@
 
 The following Data Harvesting project aims to use the API from rawg.io to see changes in video game trends over the last years.
 
-1. First download the .rmd file and save it to a new R Studio project.
+1. First download the .rmd file, open it and save it into a new R Studio project.
 
 2. Open the .rmd file and follow the instructions in the Rmd itself.
 
