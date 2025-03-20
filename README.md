@@ -12,6 +12,6 @@ The following Data Harvesting project aims to use the API from rawg.io to see ch
    
     c. **Save the key in a .env file**: Now, go to *File* on R, then *New File* and open a *Text File*. Once there you must write: TOKEN=api_key (substitute "api_key" for the series of letters and numbers you obtained on the webpage). You must save that file as ".env" in the same project folder of the script you're running.
 
-**Done. Now you can run the Script**
+**Done. Now you can run the Script!**
 
 
