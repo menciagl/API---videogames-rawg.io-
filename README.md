@@ -4,7 +4,7 @@ The following Data Harvesting project aims to use the API from rawg.io to see ch
 
 1. First download the .rmd file, open it and save it into a new R Studio project.
 
-2. Open the .rmd file and follow the instructions in the Rmd itself. It is recommended to follow the instructions once the RMD is opened since they are well explained there. The following instructions are just a summary:
+2. Open the .rmd file and follow the instructions in the Rmd itself. **It is recommended to follow the instructions once the RMD is opened since they are well explained there. The following instructions are just a summary**:
    
      a. **Install and load the package "dotenv" in R Studio**
 
